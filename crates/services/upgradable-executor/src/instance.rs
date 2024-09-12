@@ -242,11 +242,10 @@ impl Instance<Created> {
                 return Ok(0);
             };
 
-            // TODO: Check that downcasting u32 to u16 is correct.
-            // In particular check that the argument was not upcasted from u16 to u32
-            // using a different endianness than the one used by WASM.
+            //
 
-            let transactions_limit = transactions_limit as u16;
+            let transactions_limit =
+                u16::try_from(transactions_limit).expect("Guaranteed to fit in 16 bits");
             let txs: Vec<_> = source
                 .next(gas_limit, transactions_limit)
                 .into_iter()
