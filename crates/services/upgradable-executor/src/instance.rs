@@ -244,7 +244,7 @@ impl Instance<Created> {
 
             // TODO: Check that downcasting u32 to u16 is correct.
             // In particular check that the argument was not upcasted from u16 to u32
-            // using a different endianess than the one used by WASM.
+            // using a different endianness than the one used by WASM.
 
             let transactions_limit = transactions_limit as u16;
             let txs: Vec<_> = source
