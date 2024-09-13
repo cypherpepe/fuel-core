@@ -3009,11 +3009,12 @@ mod tests {
             services::executor::ForcedTransactionFailure,
         };
 
-        fn database_with_genesis_block(da_block_height: u64) -> Database<OnChain> {
-            let mut db = add_consensus_parameters(
-                Database::default(),
-                &ConsensusParameters::default(),
-            );
+        fn database_with_genesis_block_and_consensus_parameters(
+            da_block_height: u64,
+            consensus_parameters: ConsensusParameters,
+        ) -> Database<OnChain> {
+            let mut db =
+                add_consensus_parameters(Database::default(), &consensus_parameters);
             let mut block = Block::default();
             block.header_mut().set_da_height(da_block_height.into());
             block.header_mut().recalculate_metadata();
@@ -3022,6 +3023,13 @@ mod tests {
                 .insert(&0.into(), &block)
                 .expect("Should insert genesis block without any problems");
             db
+        }
+
+        fn database_with_genesis_block(da_block_height: u64) -> Database<OnChain> {
+            database_with_genesis_block_and_consensus_parameters(
+                da_block_height,
+                ConsensusParameters::default(),
+            )
         }
 
         fn add_message_to_relayer(db: &mut Database<Relayer>, message: Message) {
@@ -3803,6 +3811,45 @@ mod tests {
                 result.events[1],
                 ExecutorEvent::MessageConsumed(_)
             ));
+        }
+
+        #[test]
+        fn block_producer_never_includes_more_than_u16_max_transactions() {
+            let genesis_da_height = 1u64;
+            let relayer_db = Database::<Relayer>::default();
+
+            let block_height = 1u32;
+            let block_da_height = 2u64;
+
+            let mut consensus_parameters = ConsensusParameters::default();
+
+            // Given
+            let transactions_in_tx_source = u16::MAX as usize + 10;
+            consensus_parameters.set_block_gas_limit(u64::MAX);
+            let on_chain_db = database_with_genesis_block_and_consensus_parameters(
+                genesis_da_height,
+                consensus_parameters,
+            );
+            assert_eq!(on_chain_db.iter_all::<Messages>(None).count(), 0);
+
+            // When
+            let block = test_block(
+                block_height.into(),
+                block_da_height.into(),
+                transactions_in_tx_source,
+            );
+            let partial_fuel_block: PartialFuelBlock = block.into();
+
+            let producer = create_relayer_executor(on_chain_db, relayer_db);
+            let (result, _) = producer
+                .produce_without_commit(partial_fuel_block)
+                .unwrap()
+                .into();
+
+            // Then
+            // u16::MAX -1 transactions have been included from the transaction source, plus the mint transaction
+            // In total we expect to see u16::MAX transactions in the block
+            assert_eq!(result.block.transactions().len(), (u16::MAX) as usize);
         }
     }
 }
